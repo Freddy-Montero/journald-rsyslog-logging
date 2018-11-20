@@ -1,0 +1,8 @@
+- name: Copy logrotate configuration files
+  copy:
+    src: "{{ role_path }}/files/logrotate/"
+    dest: /etc/logrotate.d
+    mode: u=rw,g=r,o=r
+    owner: root
+    group: root
+  register: logrotate_files_update

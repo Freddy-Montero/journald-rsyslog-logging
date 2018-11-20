@@ -1,0 +1,10 @@
+/var/log/atomic-openshift-services.log
+{
+    missingok
+    sharedscripts
+    notifempty
+    extension .gz
+    postrotate
+        /bin/kill -HUP `cat /var/run/syslogd.pid 2> /dev/null` 2> /dev/null || true
+    endscript
+}

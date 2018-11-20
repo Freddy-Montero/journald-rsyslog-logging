@@ -1,0 +1,4 @@
+---
+- include: configure-journald.yml
+- include: deploy-logrotate.yml
+- include: deploy-rsyslog.yml

@@ -1,0 +1,71 @@
+- name: Check for presence of SELinux policy for rsyslog
+  shell: semodule -l | grep my-inimfile
+  changed_when: false
+  failed_when: false
+  register: my_inimfile
+
+- name: Create SELinux policy to allow rsyslog to read from container logs
+  copy:
+    src: "{{ role_path }}/files/selinux/"
+    dest: /tmp
+    mode: u=rw,g=r,o=r
+    owner: root
+    group: root
+  when: my_inimfile.rc == 1
+
+- name: Load SELinux module for rsyslog
+  shell: semodule -i /tmp/my-inimfile.pp
+  when: my_inimfile.rc == 1
+
+- name: Copy rsyslog.d configuration files
+  copy:
+    src: "{{ role_path }}/files/rsyslog.d/"
+    dest: /etc/rsyslog.d
+    mode: u=rw,g=r,o=r
+    owner: root
+    group: root
+  register: rsyslog_files_update
+
+- name: Use logendpoint.conf template
+  template:
+    src: "{{ role_path }}/templates/rsyslog.d/logendpoint.conf"
+    dest: /etc/rsyslog.d
+    mode: u=rw,g=r,o=r
+    owner: root
+    group: root
+  register: rsyslog_conf_update
+
+- name: Update rsyslog.conf imjournal
+  lineinfile:
+    dest: /etc/rsyslog.conf
+    regexp: '^(\$ModLoad imjournal|module\(load="imjournal")'
+    line: 'module(load="imjournal" StateFile="imjournal.state" UsePidFromSystem="on" RateLimit.Burst="5000000" RateLimit.Interval="1" PersistStateInterval="10000")'
+    backup: yes
+  register: rsyslog_imjournal_update
+
+- name: Comment out rsyslog.conf IMJournalStateFile
+  lineinfile:
+    dest: /etc/rsyslog.conf
+    regexp: '^\$IMJournalStateFile|^#\$IMJournalStateFile'
+    line: '#$IMJournalStateFile imjournal.state'
+  register: rsyslog_imjournalstate_update
+
+- name: Increase maximum file handles that rsyslog can process
+  copy:
+    src: "{{ role_path }}/templates/rsyslog.service.d"
+    dest: /etc/systemd/system
+    owner: root
+    group: root
+  register: rsyslog_service_files_update
+
+- name: Reload rsyslog daemon on config change
+  command: systemctl daemon-reload
+  when: rsyslog_service_files_update is changed
+
+- name: Restart rsyslog daemon
+  command: systemctl restart rsyslog
+  when: rsyslog_files_update is changed or
+    rsyslog_conf_update is changed or
+    rsyslog_imjournal_update is changed or
+    rsyslog_imjournalstate_update is changed or
+    rsyslog_service_files_update is changed

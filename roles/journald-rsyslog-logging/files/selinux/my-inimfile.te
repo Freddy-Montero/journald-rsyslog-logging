@@ -1,0 +1,17 @@
+
+module my-inimfile 1.0;
+
+require {
+	type syslogd_t;
+	type container_var_lib_t;
+	class file { getattr ioctl open read };
+	class dir search;
+}
+
+#============= syslogd_t ==============
+
+#!!!! This avc is allowed in the current policy
+allow syslogd_t container_var_lib_t:dir search;
+
+#!!!! This avc is allowed in the current policy
+allow syslogd_t container_var_lib_t:file { getattr ioctl open read };
