@@ -64,5 +64,4 @@ GPLv3
 Author Information
 ------------------
 
-Freddy Montero
-Kevin Chung
+Freddy Montero, Kevin Chung
