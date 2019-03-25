@@ -1,0 +1,58 @@
+  - set_fact:
+      namespace: "{{ rsyslog_namespace | default('logging') }}"
+      saaccount: "{{ rsyslog_account | default('rsyslog')}}"
+      mmk8stoken: "null"
+      mmk8sca: "null"
+
+  - name: see if logging project exists
+    command: oc get project {{ namespace }} -o name
+    register: rsyslognamespaceexists
+    ignore_errors: yes
+
+  - name: create logging namespace
+    command: oc adm new-project {{ namespace }} --node-selector=""
+    when: rsyslognamespaceexists.rc != 0
+
+  - name: see if rsyslog sa exists
+    command: oc get -n {{ namespace }} sa {{ saaccount }} -o name
+    register: rsyslogsaexists
+    ignore_errors: yes
+
+  - name: create rsyslog sa
+    command: oc create -n {{ namespace }} sa {{ saaccount }}
+    when: rsyslogsaexists.rc != 0
+
+  - name: give rsyslog sa cluster-reader rights
+    command: oc adm policy add-cluster-role-to-user cluster-reader system:serviceaccount:{{ namespace }}:{{ saaccount }}
+
+  - name: get rsyslog sa data
+    command: oc get -n {{ namespace }} sa {{ saaccount }} -o json
+    register: rsyslogsa
+
+  - name: get rsyslog secret name
+    set_fact:
+      token_name: "{{ item }}"
+    with_items: "{{ rsyslogsa.stdout | from_json | json_query('secrets[*].name') }}"
+    when: item.find('-token-') != -1
+
+  - name: get rsyslog secret
+    command: oc get -n {{ namespace }} secret {{ token_name }} -o json
+    register: rsyslogsecret
+
+  - set_fact:
+      rsyslog_secret: "{{ rsyslogsecret.stdout | from_json }}"
+
+  - set_fact:
+      mmk8stoken: "{{ rsyslog_secret.data.token | b64decode }}"
+      mmk8sca: "{{ rsyslog_secret['data']['ca.crt'] | b64decode }}"
+
+  - name: get openshift public url
+    shell: oc version |grep 'Server https'
+    register: openshift_server_info
+    when: inventory_hostname in groups.masters[0]
+
+  - name: set openshift_master_public_api_url
+    set_fact:
+      openshift_master_public_api_url: "{{ openshift_server_info.stdout[7:] }}"
+    when:
+    - openshift_master_public_api_url is not defined

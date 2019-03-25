@@ -1,0 +1,47 @@
+  - set_fact:
+      mmk8stoken: "{{ hostvars[groups['masters'][0]]['mmk8stoken'] }}"
+      mmk8sca: "{{ hostvars[groups['masters'][0]]['mmk8sca'] }}"
+      openshift_master_public_api_url: "{{ hostvars[groups['masters'][0]]['openshift_master_public_api_url'] }}"
+
+  - name: install rsyslog-mmkubernetes RPM
+    yum: state=latest name={{ item }}
+    with_items:
+    - rsyslog-mmkubernetes
+
+  - name: install token file for rsyslog to authenticate to kubernetes
+    copy: content={{ mmk8stoken }} dest=/etc/rsyslog.d/mmk8s.token mode=0400
+
+  - name: install CA cert file for rsyslog to use TLS with kubernetes
+    copy: content={{ mmk8sca }} dest=/etc/rsyslog.d/mmk8s.ca.crt mode=0400
+
+# NOTE: Rulebases are typically bundled into RPM install and would be extracted via the below plays,
+# but rsyslog-mmkubernetes rulebases were not working, thus we constructed them adhoc and placed into files/rsyslog.d folder
+
+#  - name: find the mmkubernetes rulebase files included with the RPM
+#    command: rpm -ql rsyslog-mmkubernetes
+#    register: rpmfiles
+
+#  - name: install the mmkubernetes rulebase files
+#    command: cp -p {{ item }} /etc/rsyslog.d/
+#    with_items: "{{ rpmfiles.stdout_lines }}"
+#    when: item.find('.rulebase') != -1
+
+  - name: copy selinux files to allow rsyslog to access CA cert db and have network access to kubernetes
+    copy: src="{{ role_path }}/files/selinux/{{ item }}" dest=/root/ mode=u+r
+    with_items:
+    - rsyslog2k8s.te
+    - rsyslogaccessnssdb.te
+
+  - name: apply selinux policy
+    shell: |
+      cd /root
+      sysmods=$( semodule -l | awk '{print $1}' )
+      for mod in rsyslog2k8s rsyslogaccessnssdb ; do
+        if echo "$sysmods" | grep -q $mod ; then
+          echo using existing selinux module $mod
+        elif [ -f ${mod}.te ] ; then
+          checkmodule -M -m -o ${mod}.mod ${mod}.te
+          semodule_package -o ${mod}.pp -m ${mod}.mod
+          semodule -i ${mod}.pp
+        fi
+      done
