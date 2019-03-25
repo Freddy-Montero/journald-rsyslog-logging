@@ -1,4 +1,9 @@
 ---
+- when: inventory_hostname == groups['masters'][0]
+  static: no
+  include: rsyslog-prep.yml
+
+- include: configure-mmkubernetes.yml
 - include: configure-journald.yml
 - include: deploy-logrotate.yml
 - include: deploy-rsyslog.yml
